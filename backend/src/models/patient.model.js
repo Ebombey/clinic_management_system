@@ -1,77 +1,39 @@
 import mongoose, { Schema } from "mongoose";
-import bcryptjs from "bcryptjs";
-import jwt from "jwt";
+import getNextSequence from "./index.js";
 
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
+// Patient Schema
 const patientSchema = new Schema(
   {
-    username: {
-      type: String,
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
       unique: true,
-      lowercase: true,
-      trim: true,
-      index: true,
     },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      lowercase: true,
-      trim: true,
-    },
-    password: {
-      type: String,
-      required: [true, "Password is required!!!"],
-    },
-    fullName: {
-      type: String,
-      required: true,
-      trim: true,
-      index: true,
-    },
-    profileIMG: {
-      type: String,
-    },
-    refreshToken: {
-      type: String,
+    patientCode: { type: String, unique: true, index: true },
+
+    bloodGroup: { type: String, enum: BLOOD_GROUPS },
+    allergies: { type: String, trim: true },
+    chronicConditions: [{ type: String, trim: true }],
+
+    emergencyContact: {
+      name: { type: String, trim: true },
+      relation: { type: String, trim: true },
+      phone: { type: String, trim: true },
     },
   },
   { timestamps: true },
 );
 
-patientSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+patientSchema.pre("validate", async function (next) {
+  if (!this.isNew || this.patientCode) return next();
 
-  this.password = await bcryptjs.hash(this.password, 10);
+  const seq = await getNextSequence("patient");
+  this.patientCode = `PAT-${String(seq).padStart(6, "0")}`;
 
   next();
 });
-
-patientSchema.methods.isPasswordCorrect = async function (password) {
-  return await bcryptjs.compare(password, this.password);
-};
-
-patientSchema.methods.generateAccessToken = function () {
-  return jwt.sign(
-    {
-      _id: this._id,
-      username: this.username,
-      email: this.email,
-      fullName: this.fullName,
-    },
-    process.env.ACCESS_TOKEN_SECRET,
-    { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
-  );
-};
-
-patientSchema.methods.generateFreshToken = function () {
-  return jwt.sign(
-    {
-      _id: this._id,
-    },
-    process.env.FRESH_TOKEN_SECRET,
-    { expiresIn: process.env.FRESH_TOKEN_EXPIRY },
-  );
-};
 
 export const Patient = mongoose.model("Patient", patientSchema);
